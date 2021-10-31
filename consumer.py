@@ -39,8 +39,13 @@ async def cancellable_aiter(
 async def main_async():
     print("Press CTRL-C to quit")
     cancellation_event = asyncio.Event()
+
+    def _signal_handler(*args, **kwargs):
+        print('Setting the cancellation event')
+        cancellation_event.set()
+
     loop = asyncio.get_event_loop()
-    loop.add_signal_handler(signal.SIGINT, lambda: cancellation_event.set())
+    loop.add_signal_handler(signal.SIGINT, _signal_handler)
 
     async with await aio_pika.connect("amqp://guest:guest@127.0.0.1/") as connection:
 
