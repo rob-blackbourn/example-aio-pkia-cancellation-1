@@ -15,7 +15,9 @@ async def cancellable_aiter(
         async_iterator: AsyncIterator[T],
         cancellation_event: Event
 ) -> AsyncIterator[T]:
-    """Wraps an async iterator such that it exits when the cancellation event is set"""
+    """Wrap an async iterator such that it exits when the cancellation event is
+    set.
+    """
     cancellation_task = asyncio.create_task(cancellation_event.wait())
     result_iter = async_iterator.__aiter__()
     while not cancellation_event.is_set():
@@ -24,30 +26,40 @@ async def cancellable_aiter(
             return_when=asyncio.FIRST_COMPLETED
         )
         for done_task in done:
-            if done_task == cancellation_task:
+            if done_task != cancellation_task:
+                # We have a result from the async iterator.
+                yield done_task.result()
+            else:
+                # The cancellation token has been set, and we should exit.
+                # Cancel any pending tasks. This is safe as there is no await
+                # between the completion of the wait on the cancellation event
+                # and the pending tasks being cancelled. This means that the
+                # pending tasks cannot have done any work.
                 for pending_task in pending:
                     pending_task.cancel()
+                # Now the tasks are cancelled we can await the cancellation
+                # error, knowing they have done no work.
+                for pending_task in pending:
                     try:
                         await pending_task
                     except asyncio.CancelledError:
                         pass
-                break
-            else:
-                yield done_task.result()
 
 
 async def main_async():
     print("Press CTRL-C to quit")
-    cancellation_event = asyncio.Event()
+    cancellation_event = Event()
 
     def _signal_handler(*args, **kwargs):
         print('Setting the cancellation event')
         cancellation_event.set()
 
     loop = asyncio.get_event_loop()
-    loop.add_signal_handler(signal.SIGINT, _signal_handler)
+    for signal_value in {signal.SIGINT, signal.SIGTERM}:
+        loop.add_signal_handler(signal_value, _signal_handler)
 
-    async with await aio_pika.connect("amqp://guest:guest@127.0.0.1/") as connection:
+    url = "amqp://guest:guest@127.0.0.1/"
+    async with await aio_pika.connect(url) as connection:
 
         channel = await connection.channel()
         queue = await channel.declare_queue('producer', passive=True)
