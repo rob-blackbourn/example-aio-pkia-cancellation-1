@@ -26,7 +26,11 @@ async def cancellable_aiter(
         for done_task in done:
             if done_task == cancellation_task:
                 for pending_task in pending:
-                    await pending_task
+                    pending_task.cancel()
+                    try:
+                        await pending_task
+                    except asyncio.CancelledError:
+                        pass
                 break
             else:
                 yield done_task.result()
