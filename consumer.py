@@ -15,6 +15,7 @@ async def cancellable_aiter(
         async_iterator: AsyncIterator[T],
         cancellation_event: Event
 ) -> AsyncIterator[T]:
+    """Wraps an async iterator such that it exits when the cancellation event is set"""
     cancellation_task = asyncio.create_task(cancellation_event.wait())
     result_iter = async_iterator.__aiter__()
     while not cancellation_event.is_set():
